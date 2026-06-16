@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CS Workspace — Prototype</title>
+
+<!-- Tailwind (Play CDN). Safelist the dynamically-built color classes so they aren't purged. -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    safelist: [
+      { pattern: /(bg|text|ring|border|from|to)-(slate|gray|emerald|amber|orange|red|blue|violet|sky|rose|indigo)-(50|100|200|300|400|500|600|700|800|900)/ },
+    ],
+  };
+</script>
+
+<!-- Single React instance shared by lucide-react + recharts via ?external -->
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.383.0?external=react",
+    "recharts": "https://esm.sh/recharts@2.12.7?external=react,react-dom"
+  }
+}
+</script>
+
+<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+
+<style>
+  html, body, #root { height: 100%; }
+  body { margin: 0; }
+  #loading { font-family: ui-sans-serif, system-ui, sans-serif; color: #64748b;
+    display: grid; place-items: center; height: 100%; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="root"><div id="loading">Loading CS Workspace…</div></div>
+<noscript>This prototype needs JavaScript enabled.</noscript>
+
+<script type="text/babel" data-type="module" data-presets="react">
+import React, { useState, Fragment } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  Home, Building2, HeartPulse, Zap, Route, Search, Plus, Bell, ChevronDown,
+  ChevronRight, Info, Mail, Phone, CalendarDays, CheckCircle2, Clock,
+  AlertTriangle, TrendingUp, TrendingDown, FileText, Play, Star, GripVertical,
+  Eye, ArrowRight, KeyRound, Users, BarChart3, ListChecks, StickyNote, Bot,
+  ExternalLink, Plug, Slack, Layers, Gift, Globe, MessageSquare, UserPlus, Circle
+} from "lucide-react";
+import {
+  AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip, ResponsiveContainer
+} from "recharts";
+
+/* ===================== REAL DATA (Snowflake: HOMIE_HEALTH_SCORES, Chris Smith's book) =====================
+   score=HEALTH_SCORE, gs/ys/ps = GOAL/YOY/PIPE sub-scores, cy/ly = CY/LY revenue, yoy = YOY_PCT,
+   goal = SEASON_GOAL, gap = GOAL_GAP_PCT.  tier/type/engage/fr/plays are CS classifications (illustrative). */
+const CLIENTS = [
+  { id:1, name:"Coatesville Area SD", st:"PA", type:"District", tier:"T2", csm:"Chris Smith", engage:"Web", fr:"GFR", plays:2, score:83, gs:82, ys:87, ps:80, cy:17060, ly:15034, yoy:13, goal:16746, gap:2, renewal:64,
+    sports:[["Football",8280,5320],["Basketball",2713,3917],["Soccer",1498,1306]] },
+  { id:2, name:"Easton School District", st:"PA", type:"District", tier:"T2", csm:"Chris Smith", engage:"Web + App", fr:"GFR", plays:3, score:82, gs:100, ys:81, ps:36, cy:19283, ly:18713, yoy:3, goal:15752, gap:22, renewal:88,
+    sports:[["Football",10412,10917],["Basketball",700,623]] },
+  { id:3, name:"Nazareth Area SD", st:"PA", type:"District", tier:"T3", csm:"Chris Smith", engage:"Web", fr:"—", plays:2, score:80, gs:100, ys:99, ps:0, cy:13682, ly:9855, yoy:39, goal:6829, gap:100, renewal:120,
+    sports:[["Football",11166,7996],["Basketball",1655,1056]] },
+  { id:4, name:"Wayne Township Public Schools", st:"NJ", type:"District", tier:"T2", csm:"Chris Smith", engage:"Web", fr:"GFR", plays:3, score:77, gs:100, ys:90, ps:0, cy:23151, ly:19356, yoy:20, goal:18056, gap:28, renewal:54,
+    sports:[["Football",10304,10211],["Basketball",4212,3319]] },
+  { id:5, name:"Terry Sanford HS Booster Club", st:"NC", type:"Booster Club", tier:"T1", csm:"Chris Smith", engage:"Web + App", fr:"Active", plays:5, score:74, gs:97, ys:86, ps:0, cy:96342, ly:85562, yoy:13, goal:82490, gap:17, renewal:41,
+    sports:[["Football",39431,37229],["Basketball",20552,16979],["Baseball",9917,8414],["Soccer",8969,7540],["Volleyball",4334,4417]],
+    children:[["Terry Sanford High School",62000],["Reid Ross Classical",21000],["Douglas Byrd HS",13342]] },
+  { id:6, name:"West Chester Area SD", st:"PA", type:"District", tier:"T1", csm:"Chris Smith", engage:"Web", fr:"—", plays:4, score:72, gs:100, ys:74, ps:0, cy:30002, ly:30989, yoy:-3, goal:24020, gap:25, renewal:73,
+    sports:[["Football",16545,14446],["Basketball",4369,4808],["Soccer",2868,3080]],
+    children:[["Bayard Rustin HS",11200],["B. Reed Henderson HS",10400],["East HS",8402]] },
+  { id:7, name:"NJ State Interscholastic Athletic Assn", st:"NJ", type:"Association", tier:"T1", csm:"Chris Smith", engage:"Web + App", fr:"—", plays:6, score:57, gs:63, ys:84, ps:0, cy:145395, ly:136442, yoy:8, goal:162778, gap:-11, renewal:33,
+    sports:[["Football",43722,35152],["Basketball",25136,20695],["Soccer",19026,19273],["Volleyball",5860,6101]],
+    children:[["North Jersey Section 1",58000],["Central Jersey Group 4",49000],["South Jersey Section",38395]] },
+  { id:8, name:"Norwin SD", st:"PA", type:"District", tier:"T2", csm:"Chris Smith", engage:"Web", fr:"—", plays:3, score:60, gs:90, ys:50, ps:0, cy:23110, ly:27141, yoy:-15, goal:21046, gap:10, renewal:96,
+    sports:[["Football",10777,11341],["Soccer",2566,2766],["Basketball",1668,2743],["Volleyball",1286,1609]] },
+  { id:9, name:"Neshaminy SD", st:"PA", type:"District", tier:"T3", csm:"Chris Smith", engage:"—", fr:"—", plays:4, score:48, gs:82, ys:24, ps:0, cy:10027, ly:13933, yoy:-28, goal:9843, gap:2, renewal:27,
+    sports:[["Football",7556,9514],["Basketball",620,1900],["Soccer",875,866]] },
+  { id:10, name:"PIAA District III", st:"PA", type:"Conference", tier:"T1", csm:"Chris Smith", engage:"Web", fr:"—", plays:5, score:36, gs:46, ys:45, ps:0, cy:166136, ly:201459, yoy:-18, goal:211144, gap:-21, renewal:19,
+    sports:[["Basketball",41218,50991],["Football",40770,47982],["Soccer",22152,24642],["Volleyball",12273,15904],["Baseball",7413,10788]],
+    children:[["Cumberland Valley HS",24000],["Central Dauphin HS",19500],["Hershey HS",14600]] },
+  { id:11, name:"Tucson Unified School District", st:"AZ", type:"District", tier:"T1", csm:"Chris Smith", engage:"—", fr:"—", plays:4, score:25, gs:50, ys:0, ps:0, cy:13232, ly:0, yoy:null, goal:0, gap:null, renewal:58, newAd:true,
+    sports:[["Football",4690,0],["Basketball",2255,0],["Soccer",1709,0],["Baseball",1518,0],["Volleyball",1415,0]] },
+  { id:12, name:"PIAA (State Association)", st:"PA", type:"Association", tier:"T1", csm:"Chris Smith", engage:"Web + App", fr:"GFR", plays:6, score:20, gs:19, ys:36, ps:0, cy:280752, ly:359596, yoy:-22, goal:455494, gap:-38, renewal:12,
+    sports:[["Football",61000,79000],["Basketball",58000,74000],["Soccer",40000,52000]] },
+  { id:13, name:"Cheltenham School District", st:"PA", type:"District", tier:"T3", csm:"Chris Smith", engage:"—", fr:"—", plays:3, score:19, gs:34, ys:7, ps:0, cy:3597, ly:6032, yoy:-37, goal:5038, gap:-29, renewal:45,
+    sports:[["Basketball",1773,2509],["Football",1532,3154]] },
+  { id:14, name:"Edison Township School District", st:"NJ", type:"District", tier:"T3", csm:"Chris Smith", engage:"—", fr:"—", plays:5, score:0, gs:0, ys:0, ps:0, cy:166, ly:5636, yoy:-97, goal:5636, gap:-97, renewal:8, supRetiring:true,
+    sports:[["Basketball",79,0]] },
+];
+
+const BANDS = {
+  green:  { c:"emerald", label:"Healthy" },
+  yellow: { c:"amber",   label:"Watch" },
+  orange: { c:"orange",  label:"At risk" },
+  red:    { c:"red",     label:"Critical" },
+};
+const bandOf = s => s >= 80 ? "green" : s >= 60 ? "yellow" : s >= 40 ? "orange" : "red";
+const fmt = n => n == null ? "—" : "$" + Math.round(n).toLocaleString();
+const k = n => "$" + Math.round(n/1000) + "k";
+const M = n => "$" + (n/1000000).toFixed(2) + "M";
+const clamp = (x,a,b) => Math.max(a, Math.min(b, x));
+const slug = name => name.toLowerCase().replace(/[^a-z]/g,"").slice(0,14);
+const renDate = days => new Date(Date.now()+days*86400000).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+const ALL_SPORTS = ["Football","Basketball","Baseball","Volleyball","Soccer","Wrestling","Track","Lacrosse"];
+
+const BOOK = { customers:71, cy:1881301, goal:2258475, ly:2026356, over:34, under:37, atrisk:31, daysLeft:27 };
+
+const NAV = [
+  { id:"command",     label:"Command Center", icon:Home },
+  { id:"clients",     label:"Clients",        icon:Building2 },
+  { id:"actions",     label:"Action Tracker", icon:ListChecks },
+  { id:"healthscores",label:"Healthscores",   icon:HeartPulse },
+  { id:"plays",       label:"Plays",          icon:Zap },
+  { id:"journeys",    label:"Journeys",       icon:Route },
+  { id:"infobook",    label:"Infobook",       icon:BarChart3 },
+  { id:"admin",       label:"Admin",          icon:KeyRound },
+  { id:"scope",       label:"Roadmap",        icon:Layers },
+];
+
+const PAGE_INFO = {
+  command:{ title:"Command Center", sub:"Your book at a glance — goal progress and product adoption up top, then today's work.",
+    can:["See where the book stands against its season goal","Track product adoption and expansion openings","Work through To-Dos and today's meetings","Spot clients whose health moved this week"] },
+  clients:{ title:"Clients", sub:"Your book of business. Expand a row for the account detail, or open the full account page.",
+    can:["Sort and scan the full book (worst health first)","Expand any row for revenue, sport coverage and active plays","Filter by tier, at-risk or upcoming renewals","Open any client for the full account 360"] },
+  actions:{ title:"Action Tracker", sub:"Every action taken across the book — sent by a CSM or fired automatically by a Play.",
+    can:["See manual actions (emails, calls, notes) and automated Play steps","Filter by source: CSM, Play, or System","Jump to the client behind any action","Confirm what's been done and when"] },
+  healthscores:{ title:"Healthscores", sub:"Build and manage scoring, and see every client's current score.",
+    can:["Configure factors, weights and point allocation (Build & manage)","Calibrate against real clients before publishing","See all clients and their sub-scores (Client scores)","Read scores as Healthy / Watch / At-risk / Critical bands"] },
+  plays:{ title:"Plays", sub:"Build automated playbooks, and see which clients are enrolled.",
+    can:["Build a sequence of steps with a goal that auto-exits","Manage the play library (Build & manage)","See active and past plays per client (Client plays)","Keep messages human-reviewed before they send"] },
+  journeys:{ title:"Journeys", sub:"Design lifecycle journeys, and track every client across the milestone grid.",
+    can:["Build milestones with tasks and achievements","Manage journey templates (Build & manage)","Track the whole book on the lifecycle grid (Client journeys)","See who is on-track, behind, or stuck"] },
+  infobook:{ title:"Infobook", sub:"The CS Infobook — your Looker dashboard, embedded and refreshed hourly.",
+    can:["View book-level revenue and performance analytics","Trust the same numbers as the rest of the business","Open the full dashboard in Looker","Read trends without leaving the workspace"] },
+  admin:{ title:"Admin", sub:"Connect your accounts, and manage configuration (some sections are access-controlled).",
+    can:["Connect your Google and Slack accounts (Integrations)","Manage Application & API keys (Admin only)","Manage users and roles (Admin & CS Leadership)","Configure the Homie assistant (Admin only)"] },
+  scope:{ title:"Roadmap & Scope", sub:"Every capability we're building, which version it lands in, and where it came from.",
+    can:["See exactly what ships in V1 vs. later","Trace each feature to ChurnZero or Steve's mockup","Filter by version or source","Use it as the basis for the PRD"] },
+};
+
+/* ===================== PRIMITIVES ===================== */
+function HealthBadge({ score, size="md" }) {
+  const c = BANDS[bandOf(score)].c;
+  const d = size==="lg" ? "h-16 w-16 text-2xl" : size==="sm" ? "h-7 w-7 text-xs" : "h-10 w-10 text-sm";
+  return <div className={`${d} rounded-full grid place-items-center font-bold text-${c}-700 bg-${c}-100 ring-2 ring-${c}-200`}>{score}</div>;
+}
+const Dot = ({ score }) => <span className={`h-2.5 w-2.5 rounded-full bg-${BANDS[bandOf(score)].c}-500 inline-block`} />;
+const Card = ({ children, className="" }) => <div className={`bg-white rounded-xl border border-slate-200 ${className}`}>{children}</div>;
+function Tile({ label, value, delta }) {
+  const up = typeof delta==="number" && delta>=0;
+  return (
+    <Card className="p-4 flex-1 min-w-[140px]">
+      <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</div>
+      <div className="mt-1.5 flex items-end justify-between">
+        <div className="text-2xl font-semibold text-slate-900">{value}</div>
+        {typeof delta==="number" && <div className={`flex items-center gap-0.5 text-xs font-medium ${up?"text-emerald-600":"text-red-600"}`}>{up?<TrendingUp size={13}/>:<TrendingDown size={13}/>}{Math.abs(delta)}</div>}
+      </div>
+    </Card>
+  );
+}
+const Pill = ({ children, tone="slate" }) => <span className={`px-2 py-0.5 rounded-full text-xs font-medium bg-${tone}-100 text-${tone}-700`}>{children}</span>;
+const yoyTone = v => v == null ? "slate" : v >= 0 ? "emerald" : "red";
+const yoyTxt = v => v == null ? "new" : (v>=0?"+":"")+v+"%";
+const renTone = d => d<=14 ? "red" : d<=45 ? "amber" : "slate";
+
+function PageHeader({ id, right }) {
+  const [open, setOpen] = useState(false);
+  const info = PAGE_INFO[id];
+  return (
+    <div className="mb-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900 tracking-tight">{info.title}</h1>
+          <p className="text-sm text-slate-500 mt-0.5 max-w-2xl">{info.sub}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {right}
+          <button onClick={()=>setOpen(!open)} className="flex items-center gap-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg border border-blue-100">
+            <Info size={14}/> What you can do here {open?<ChevronDown size={13}/>:<ChevronRight size={13}/>}
+          </button>
+        </div>
+      </div>
+      {open && (
+        <div className="mt-3 bg-blue-50/60 border border-blue-100 rounded-lg p-3 grid sm:grid-cols-2 gap-x-6 gap-y-1.5">
+          {info.can.map((c,i)=><div key={i} className="flex items-start gap-2 text-sm text-slate-700"><CheckCircle2 size={15} className="text-blue-500 mt-0.5 shrink-0"/>{c}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ===================== COMMAND CENTER ===================== */
+function BookGoalProgress() {
+  const [open, setOpen] = useState(false);
+  const pct = Math.round(BOOK.cy / BOOK.goal * 100);
+  const top = [...CLIENTS].filter(c=>c.gap!=null).sort((a,b)=>b.gap-a.gap).slice(0,5);
+  const bottom = [...CLIENTS].filter(c=>c.gap!=null).sort((a,b)=>a.gap-b.gap).slice(0,5);
+  return (
+    <div className="bg-slate-900 rounded-xl p-5 text-white">
+      <button onClick={()=>setOpen(!open)} className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wide">
+        Book Goal Progress · SY 2025–26 <ChevronRight size={13} className={`transition-transform ${open?"rotate-90":""}`}/> {open?"click to collapse":"click to expand"}
+      </button>
+      <div className="mt-3 flex items-start justify-between gap-6">
+        <div className="flex-1">
+          <div className="text-xl font-semibold">{M(BOOK.cy)} of {M(BOOK.goal)} goal <span className="text-slate-400 font-normal text-base">· YTD HTT Revenue</span></div>
+          <div className="mt-3 h-2.5 bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full" style={{width:`${Math.min(pct,100)}%`}}/></div>
+          <div className="mt-2 flex justify-between text-xs"><span className="text-slate-300 font-medium">{pct}% to goal</span><span className="text-slate-400">{fmt(BOOK.goal-BOOK.cy)} to close · {BOOK.daysLeft} days remaining in fiscal year</span></div>
+        </div>
+        <div className="flex gap-6 text-center shrink-0">
+          <div><div className="text-2xl font-semibold text-emerald-400">{BOOK.over}</div><div className="text-[10px] text-slate-400 uppercase">Over goal<br/>customers</div></div>
+          <div><div className="text-2xl font-semibold text-amber-400">{BOOK.under}</div><div className="text-[10px] text-slate-400 uppercase">Under goal<br/>customers</div></div>
+        </div>
+      </div>
+      {open && (
+        <div className="mt-4 pt-4 border-t border-slate-700 grid sm:grid-cols-2 gap-6">
+          <div>
+            <div className="text-xs font-semibold text-emerald-400 uppercase mb-2">Top over goal</div>
+            {top.map(c=><div key={c.id} className="flex justify-between text-sm py-1"><span className="text-slate-300 truncate pr-2">{c.name}</span><span className="text-emerald-400 font-medium">+{c.gap}%</span></div>)}
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-amber-400 uppercase mb-2">Top under goal</div>
+            {bottom.map(c=><div key={c.id} className="flex justify-between text-sm py-1"><span className="text-slate-300 truncate pr-2">{c.name}</span><span className="text-red-400 font-medium">{c.gap}%</span></div>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProductAdoption() {
+  const [open, setOpen] = useState(false);
+  const products = [
+    ["Fundraising · GFR Raised","$2.4M","23 of 71 customers","amber"],
+    ["SchoolFundr+","9 of 71","12% adoption · 15 expansion opps","emerald"],
+    ["Engage Websites","44 of 71","62% adoption · 25 expansion opps","blue"],
+    ["Engage Mobile Apps","13 of 71","18% adoption · all have Engage Web","violet"],
+  ];
+  return (
+    <div>
+      <button onClick={()=>setOpen(!open)} className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+        Product Adoption · Chris's book <ChevronRight size={13} className={`transition-transform ${open?"rotate-90":""}`}/> {open?"click to collapse":"click to expand"}
+      </button>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {products.map(([label,big,note,c])=>(
+          <Card key={label} className="p-4">
+            <div className="flex items-start justify-between"><div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{label}</div><ChevronRight size={13} className="text-slate-300"/></div>
+            <div className="text-2xl font-semibold text-slate-900 mt-1">{big}</div>
+            <div className="text-xs text-slate-400 mt-1">{note}</div>
+            {open && <div className="mt-2 pt-2 border-t border-slate-100"><div className={`h-1.5 bg-slate-100 rounded-full`}><div className={`h-1.5 bg-${c}-500 rounded-full`} style={{width: note.includes("%") ? note.match(/\d+/)[0]+"%" : "100%"}}/></div></div>}
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CommandCenter({ go }) {
+  const [tab, setTab] = useState("todos");
+  const tabs = [["todos","To Dos"],["book","My Book"],["health","Health"]];
+  const tasks = [
+    { t:"Renewal conversation — PIAA (State Association)", why:"Renews in 12 days · health 20 · −38% to goal", urgent:true },
+    { t:"Re-engage — Edison Township SD", why:"Superintendent retiring · health 0 · renewal in 8 days", urgent:true },
+    { t:"New AD intro — Tucson Unified SD", why:"New athletic director announced", urgent:false, due:"Tomorrow" },
+    { t:"QBR prep — PIAA District III", why:"−18% YoY · $166k book · renewal in 19 days", urgent:false, due:"Wed" },
+    { t:"Pre-season audit — Coatesville Area SD", why:"Healthy · prep fall pricing & schedule", urgent:false, due:"Thu" },
+  ];
+  const meetings = [
+    { t:"PIAA — Renewal strategy", time:"10:30", who:"Chris Smith" },
+    { t:"Terry Sanford Booster Club — QBR", time:"14:00", who:"Chris Smith" },
+  ];
+  const moves = [
+    { c:CLIENTS[11], d:-9 }, { c:CLIENTS[8], d:-6 }, { c:CLIENTS[2], d:5 }, { c:CLIENTS[0], d:4 }, { c:CLIENTS[12], d:-12 },
+  ];
+  return (
+    <div>
+      <PageHeader id="command" />
+      <div className="space-y-4 mb-5">
+        <BookGoalProgress />
+        <ProductAdoption />
+      </div>
+
+      <div className="flex flex-wrap gap-3 mb-5">
+        <Tile label="Renewals < 90d" value="6" delta={1} />
+        <Tile label="At-risk clients" value={BOOK.atrisk} delta={-2} />
+        <Tile label="Tasks due" value="5" />
+        <Tile label="Open Plays" value="9" delta={2} />
+      </div>
+
+      <div className="flex gap-1 border-b border-slate-200 mb-4">
+        {tabs.map(([id,l])=><button key={id} onClick={()=>setTab(id)} className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab===id?"border-blue-600 text-blue-700":"border-transparent text-slate-500 hover:text-slate-800"}`}>{l}</button>)}
+      </div>
+
+      {tab==="todos" && (
+        <div className="grid lg:grid-cols-3 gap-4">
+          <Card className="lg:col-span-2 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold text-slate-700">Tasks</div>
+            {tasks.map((t,i)=>(
+              <div key={i} className="px-4 py-3 flex items-center gap-3 border-b border-slate-50 hover:bg-slate-50">
+                <input type="checkbox" className="h-4 w-4 rounded accent-blue-600"/>
+                <div className="flex-1"><div className="text-sm font-medium text-slate-800">{t.t}</div><div className="text-xs text-slate-400">{t.why}</div></div>
+                {t.urgent ? <Pill tone="red">Today</Pill> : <span className="text-xs text-slate-400">{t.due}</span>}
+              </div>
+            ))}
+          </Card>
+          <Card className="overflow-hidden h-fit">
+            <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold text-slate-700 flex items-center gap-2"><CalendarDays size={15} className="text-slate-400"/> Today's meetings</div>
+            {meetings.map((m,i)=>(
+              <div key={i} className="px-4 py-3 border-b border-slate-50 flex items-center gap-3">
+                <div className="text-sm font-semibold text-blue-700 w-12">{m.time}</div>
+                <div className="flex-1 text-sm text-slate-800">{m.t}<div className="text-xs text-slate-400">{m.who}</div></div>
+              </div>
+            ))}
+          </Card>
+        </div>
+      )}
+
+      {tab==="book" && (
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {CLIENTS.map(c=>(
+            <Card key={c.id} className="p-4 hover:shadow-sm cursor-pointer" onClick={()=>go("clients",c.id)}>
+              <div className="flex items-center gap-3">
+                <HealthBadge score={c.score}/>
+                <div className="flex-1 min-w-0"><div className="text-sm font-semibold text-slate-800 truncate">{c.name}</div><div className="text-xs text-slate-400">{c.st} · {k(c.cy)} YTD</div></div>
+                <Pill tone={yoyTone(c.yoy)}>{yoyTxt(c.yoy)}</Pill>
+              </div>
+              <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><span>Renews in {c.renewal}d</span><span>{BANDS[bandOf(c.score)].label}</span></div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {tab==="health" && (
+        <Card className="overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold text-slate-700">Health changes this week</div>
+          {moves.map(({c,d},i)=>(
+            <div key={i} onClick={()=>go("clients",c.id)} className="px-4 py-3 flex items-center gap-3 border-b border-slate-50 hover:bg-slate-50 cursor-pointer">
+              <HealthBadge score={c.score} size="sm"/>
+              <div className="flex-1 text-sm font-medium text-slate-800">{c.name}</div>
+              <div className="text-xs text-slate-400">{BANDS[bandOf(c.score)].label}</div>
+              <div className={`w-20 text-right text-sm font-semibold ${d>=0?"text-emerald-600":"text-red-600"}`}>{d>=0?"+":""}{d} pts</div>
+            </div>
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* ===================== CLIENTS (Book of Business — Steve's layout) ===================== */
+function ClientRowDetail({ c, go }) {
+  const pct = c.goal>0 ? Math.round(c.cy/c.goal*100) : null;
+  const covered = new Set(c.sports.filter(s=>s[1]>0).map(s=>s[0]));
+  const plays = c.score<40 ? [["Renewal Outreach","ACTIVE"],["QBR Prep","DRAFTED"],["Save Play","DRAFTED"]]
+              : c.score<60 ? [["Renewal Outreach","ACTIVE"],["QBR Prep","DRAFTED"]]
+              : [["Pre-Season Readiness","ACTIVE"],["QBR Prep","DRAFTED"]];
+  const tps = [[CalendarDays,"QBR meeting","6d ago"],[StickyNote,"SFDC note","18d ago"],[Phone,"Monthly check-in","21d ago"]];
+  return (
+    <td colSpan={11} className="bg-slate-50 px-4 py-4 border-b border-slate-200">
+      <div className="grid lg:grid-cols-3 gap-3">
+        <Card className="p-4">
+          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Revenue &amp; Renewal</div>
+          <div className="grid grid-cols-2 gap-y-3 text-sm">
+            <div><div className="text-[10px] text-slate-400 uppercase">Revenue YTD</div><div className="font-semibold text-slate-900 text-base">{k(c.cy)}</div></div>
+            <div><div className="text-[10px] text-slate-400 uppercase">YoY</div><div className={`font-semibold text-base text-${yoyTone(c.yoy)}-600`}>{yoyTxt(c.yoy)}</div></div>
+            <div><div className="text-[10px] text-slate-400 uppercase">Health</div><div className={`font-semibold text-base text-${BANDS[bandOf(c.score)].c}-600`}>{c.score}</div></div>
+            <div><div className="text-[10px] text-slate-400 uppercase">Tier</div><div className="font-semibold text-base text-slate-900">{c.tier}</div></div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-slate-100">
+            <div className="text-[10px] text-slate-400 uppercase mb-1">Progress to goal</div>
+            {pct==null ? <div className="text-sm text-slate-400">No goal set</div> : <>
+              <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${pct>=100?"bg-emerald-500":"bg-blue-500"}`} style={{width:`${Math.min(pct,100)}%`}}/></div>
+              <div className="flex justify-between text-xs mt-1"><span className={pct>=100?"text-emerald-600 font-medium":"text-slate-500"}>{pct}% to goal</span><span className="text-slate-400">{k(c.cy)} of {k(c.goal)}</span></div>
+            </>}
+          </div>
+          <div className="mt-3 text-sm"><span className="text-slate-500">Renewal </span><span className="text-slate-800 font-medium">{renDate(c.renewal)}</span> <span className={`text-${renTone(c.renewal)}-600`}>(in {c.renewal}d)</span></div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-3">Sport Coverage</div>
+          <div className="grid grid-cols-2 gap-y-2 gap-x-4">
+            {ALL_SPORTS.map(s=>{const on=covered.has(s);return(
+              <div key={s} className="flex items-center gap-2 text-sm">{on ? <CheckCircle2 size={15} className="text-emerald-500"/> : <Circle size={14} className="text-slate-300"/>}<span className={on?"text-slate-700":"text-slate-400"}>{s}</span></div>
+            );})}
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Active Plays · {plays.filter(p=>p[1]==="ACTIVE").length}</div>
+          {plays.map(([n,st],i)=>(
+            <div key={i} className="flex items-center gap-2 text-sm py-1"><Zap size={13} className={st==="ACTIVE"?"text-emerald-500":"text-slate-300"}/><span className="flex-1 text-slate-700">{n}</span><span className={`text-[10px] font-semibold ${st==="ACTIVE"?"text-emerald-600":"text-slate-400"}`}>{st}</span></div>
+          ))}
+          <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mt-3 mb-1">Recent Touchpoints</div>
+          {tps.map(([Ic,t,when],i)=>(
+            <div key={i} className="flex items-center gap-2 text-sm py-0.5"><Ic size={13} className="text-slate-400"/><span className="flex-1 text-slate-600">{t}</span><span className="text-xs text-slate-400">{when}</span></div>
+          ))}
+        </Card>
+      </div>
+    </td>
+  );
+}
+
+function ClientsList({ go }) {
+  const [exp, setExp] = useState(7);
+  const [filter, setFilter] = useState("all");
+  const chips = [["all","All"],["T1","Tier 1"],["T2","Tier 2"],["T3","Tier 3"],["atrisk","At risk"],["renew","Renewal < 90d"]];
+  let rows = [...CLIENTS].sort((a,b)=>a.score-b.score);
+  if (filter==="T1"||filter==="T2"||filter==="T3") rows = rows.filter(c=>c.tier===filter);
+  if (filter==="atrisk") rows = rows.filter(c=>c.score<60);
+  if (filter==="renew") rows = rows.filter(c=>c.renewal<90);
+  const count = t => CLIENTS.filter(c=>c.tier===t).length;
+  const Th = ({ children, r }) => <th className={`font-semibold py-2.5 px-3 whitespace-nowrap text-xs uppercase tracking-wide ${r?"text-right":"text-left"}`}>{children}</th>;
+  return (
+    <div>
+      <PageHeader id="clients" right={<button className="text-xs font-medium text-slate-600 border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg flex items-center gap-1"><FileText size={12}/> Export CSV</button>} />
+      <div className="flex flex-wrap gap-2 mb-4">
+        {chips.map(([id,l])=>{const n = id==="T1"||id==="T2"||id==="T3" ? ` (${count(id)})` : ""; return <button key={id} onClick={()=>setFilter(id)} className={`text-xs font-medium px-3 py-1.5 rounded-full border ${filter===id?"bg-blue-600 text-white border-blue-600":"bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>{l}{n}</button>;})}
+      </div>
+      <Card className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse min-w-[1040px]">
+          <thead>
+            <tr className="bg-slate-900 text-slate-300 border-b border-slate-200">
+              <Th>Customer</Th><Th>State</Th><Th>Tier</Th><Th>Type</Th><Th>Health</Th>
+              <Th r>Rev YTD</Th><Th r>YoY</Th><Th r>Pace</Th><Th r>Renewal</Th><Th r>Plays</Th><Th r></Th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(c=>(
+              <Fragment key={c.id}>
+                <tr onClick={()=>setExp(exp===c.id?null:c.id)} className={`border-b border-slate-50 cursor-pointer ${exp===c.id?"bg-blue-50/60":"hover:bg-slate-50"}`}>
+                  <td className="py-3 px-3">
+                    <div className="flex items-center gap-2">
+                      <ChevronRight size={14} className={`text-slate-400 transition-transform ${exp===c.id?"rotate-90":""}`}/>
+                      <Globe size={15} className="text-blue-500 shrink-0"/>
+                      <span className="font-medium text-slate-800 truncate max-w-[260px]">{c.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 text-slate-500">{c.st}</td>
+                  <td className="px-3 text-slate-600">{c.tier}</td>
+                  <td className="px-3"><span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{c.type==="District"?"DIST":c.type==="Association"?"ASSN":c.type==="Conference"?"CONF":c.type==="Booster Club"?"BOOST":"RET"}</span></td>
+                  <td className="px-3"><div className="flex items-center gap-1.5"><Dot score={c.score}/><span className="text-slate-700">{c.score}</span></div></td>
+                  <td className="px-3 text-right text-slate-700">{k(c.cy)}</td>
+                  <td className={`px-3 text-right font-medium text-${yoyTone(c.yoy)}-600`}>{yoyTxt(c.yoy)}</td>
+                  <td className="px-3 text-right text-slate-600">{c.gap==null?"—":(c.gap>=0?"+":"")+c.gap+"%"}</td>
+                  <td className={`px-3 text-right text-${renTone(c.renewal)}-600`}>{c.renewal}d</td>
+                  <td className="px-3 text-right text-slate-600">{c.plays}</td>
+                  <td className="px-3 text-right"><button onClick={e=>{e.stopPropagation(); go("clients",c.id);}} className="text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg inline-flex items-center gap-1">Open <ArrowRight size={11}/></button></td>
+                </tr>
+                {exp===c.id && <tr><ClientRowDetail c={c} go={go}/></tr>}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
+/* ===================== CLIENT 360 ===================== */
+function ClientProfile({ c, go }) {
+  const [tab, setTab] = useState("usage");
+  const tabs = [["Usage","usage"],["Accounts","accounts"],["Plays","plays"],["Journeys","journeys"],["Activity","activity"],["Contacts","contacts"]];
+  const trend = [{m:"Apr",r:Math.round(c.cy*0.10)},{m:"May",r:Math.round(c.cy*0.06)},{m:"Jun",r:Math.round(c.cy*0.03)}];
+  const frEnrolled = c.fr !== "—";
+  const frCampaigns = [
+    ["Athletic Booster Drive", frEnrolled?"ACTIVE":"GAP", frEnrolled?87000:null, frEnrolled?"14d ago":null],
+    ["Football Program Sponsor", frEnrolled?"ACTIVE":"GAP", frEnrolled?31000:null, frEnrolled?"3d ago":null],
+    ["General Donation","GAP",null,null],
+    ["Senior Class Gift","GAP",null,null],
+    ["Capital Campaign","GAP",null,null],
+  ];
+  const frActive = frCampaigns.filter(r=>r[1]==="ACTIVE").length;
+  const childTotal = c.children ? c.children.reduce((a,b)=>a+b[1],0) : 0;
+
+  const contacts = [
+    ["Jamie Reeves","jreeves@tusd.org","(520) 555-0142","Athletic Director",[["DECISION MAKER","rose"],["CHAMPION","emerald"]],["Call","2d","emerald"],"CONFIRMED","emerald","View"],
+    ["Sarah Lopez","slopez@tusd.org","(520) 555-0156","Principal — Tucson HS",[["DECISION MAKER","rose"]],["Email","18d","amber"],"PENDING","amber","Confirm"],
+    ["Mike Chen","mchen@tusd.org","(520) 555-0143","Assistant AD / Ops",[["OUTAGE CONTACT","sky"],["CHAMPION","emerald"]],["Text","14d","emerald"],"CONFIRMED","emerald","View"],
+    ["Tony Martinez","tmartinez@tusd.org","(520) 555-0167","Booster Club President",[["CHAMPION","emerald"]],["Email","34d","amber"],"PENDING","amber","Confirm"],
+    ["Laura Bishop","lbishop@tusd.org","(520) 555-0189","Business Manager",[["OUTAGE CONTACT","sky"]],["Email","62d","red"],"OVERDUE","red","Confirm"],
+  ];
+  const missing = [
+    ["Superintendent","Critical role for district-level escalations and exec sponsorship"],
+    ["CFO / Finance Lead","Critical role for contract execution and payment authorization"],
+    ["IT Director","Critical role for technical implementation and outage escalations"],
+  ];
+
+  return (
+    <div>
+      <button onClick={()=>go("clients")} className="text-xs text-slate-400 hover:text-slate-600 mb-3 flex items-center gap-1"><ChevronRight size={12} className="rotate-180"/> Book of Business</button>
+
+      <Card className="p-5 mb-4">
+        <div className="flex items-start gap-4">
+          <div className="h-12 w-12 rounded-lg bg-slate-800 text-white grid place-items-center font-bold text-sm">{c.name.split(" ").slice(0,2).map(w=>w[0]).join("")}</div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-semibold text-slate-900">{c.name}</h1>
+              <Pill tone="slate">{c.st}</Pill>
+              <Pill tone="slate">{c.tier} · {c.type}</Pill>
+              {c.engage!=="—" && <Pill tone="blue">Engage {c.engage}</Pill>}
+              {c.fr!=="—" && <Pill tone="amber">{c.fr}</Pill>}
+              {c.newAd && <Pill tone="amber">New AD</Pill>}
+              {c.supRetiring && <Pill tone="red">Supt. retiring</Pill>}
+              <a className="text-xs text-blue-600 flex items-center gap-0.5 cursor-pointer">Open in Salesforce <ArrowRight size={11}/></a>
+            </div>
+            <div className="text-sm text-slate-500 mt-0.5">Owner {c.csm}{c.children?` · ${c.children.length} member schools`:""}</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button className="text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5"><Mail size={13}/> Compose</button>
+              <button className="text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5"><CheckCircle2 size={13}/> Log activity</button>
+              <button className="text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5"><Zap size={13}/> Enroll in Play</button>
+            </div>
+          </div>
+          <div className="text-center"><HealthBadge score={c.score} size="lg"/><div className={`mt-1.5 text-xs font-medium text-${BANDS[bandOf(c.score)].c}-600`}>{BANDS[bandOf(c.score)].label}</div></div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-100">
+          <div><div className="text-xs text-slate-400 uppercase">SY-to-date revenue</div><div className="text-sm font-semibold text-slate-800">{fmt(c.cy)}</div></div>
+          <div><div className="text-xs text-slate-400 uppercase">YoY</div><div className={`text-sm font-semibold text-${yoyTone(c.yoy)}-600`}>{yoyTxt(c.yoy)}</div></div>
+          <div><div className="text-xs text-slate-400 uppercase">Goal pace</div><div className="text-sm font-semibold text-slate-800">{c.gap==null?"—":(c.gap>=0?"+":"")+c.gap+"%"}</div></div>
+          <div><div className="text-xs text-slate-400 uppercase">Renewal</div><div className="text-sm font-semibold text-slate-800">{c.renewal} days</div></div>
+        </div>
+      </Card>
+
+      <div className="flex gap-1 border-b border-slate-200 mb-4 overflow-x-auto">
+        {tabs.map(([t,id])=><button key={id} onClick={()=>setTab(id)} className={`px-3 py-2 text-sm font-medium -mb-px border-b-2 whitespace-nowrap ${tab===id?"border-blue-600 text-blue-700":"border-transparent text-slate-500 hover:text-slate-800"}`}>{t}</button>)}
+      </div>
+
+      {tab==="usage" && (
+        <div className="space-y-4">
+          <div className="grid lg:grid-cols-5 gap-4">
+            <Card className="lg:col-span-2 p-4">
+              <div className="text-sm font-semibold text-slate-700 mb-3">Revenue — last 3 months</div>
+              <ResponsiveContainer width="100%" height={190}>
+                <LineChart data={trend}><CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/><XAxis dataKey="m" tick={{fontSize:11}} stroke="#94a3b8"/><YAxis tick={{fontSize:11}} stroke="#94a3b8" width={44} tickFormatter={v=>`$${Math.round(v/1000)}k`}/><Tooltip formatter={v=>fmt(v)}/><Line type="monotone" dataKey="r" stroke="#2563eb" strokeWidth={2.5} dot={{r:3}}/></LineChart>
+              </ResponsiveContainer>
+              <div className="text-xs text-slate-400 mt-1">Off-season taper into summer — illustrative monthly split.</div>
+            </Card>
+            <Card className="lg:col-span-3 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold text-slate-700">Sport Coverage</div>
+              <div className="px-4 py-2 grid grid-cols-12 gap-2 text-xs font-semibold text-slate-400 border-b border-slate-100"><div className="col-span-4">Sport</div><div className="col-span-3 text-right">This year</div><div className="col-span-3 text-right">Last year</div><div className="col-span-2 text-right">YoY</div></div>
+              {c.sports.map(([s,cy,ly],i)=>{
+                const dd = ly>0 ? Math.round((cy-ly)/ly*100) : null; const lost = cy===0 && ly>0;
+                return (
+                  <div key={i} className="px-4 py-2 grid grid-cols-12 gap-2 items-center border-b border-slate-50 text-sm">
+                    <div className="col-span-4 flex items-center gap-2 text-slate-700">{s}{lost && <Pill tone="red">lost</Pill>}{ly===0&&cy>0 && <Pill tone="emerald">new</Pill>}</div>
+                    <div className="col-span-3 text-right text-slate-700">{fmt(cy)}</div>
+                    <div className="col-span-3 text-right text-slate-500">{fmt(ly)}</div>
+                    <div className={`col-span-2 text-right text-xs font-medium text-${yoyTone(dd)}-600`}>{dd==null?"—":(dd>=0?"+":"")+dd+"%"}</div>
+                  </div>
+                );
+              })}
+            </Card>
+          </div>
+
+          {/* Fundraising Coverage — matches Steve's campaign-type table */}
+          <Card className="overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+              <div className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Gift size={15} className="text-amber-500"/> Fundraising Coverage</div>
+              <div className="text-xs text-slate-400">{frActive} of 5 campaign types active</div>
+            </div>
+            <div className="px-4 py-2 grid grid-cols-12 gap-2 text-xs font-semibold text-slate-400 border-b border-slate-100"><div className="col-span-5">Campaign type</div><div className="col-span-3 text-center">Status</div><div className="col-span-2 text-right">YTD raised</div><div className="col-span-2 text-right">Last active</div></div>
+            {frCampaigns.map(([name,status,raised,active],i)=>{
+              const gap = status==="GAP";
+              return (
+                <div key={i} className="px-4 py-2.5 grid grid-cols-12 gap-2 items-center border-b border-slate-50 text-sm">
+                  <div className={`col-span-5 ${gap?"text-slate-400":"text-slate-700"}`}>{name}</div>
+                  <div className="col-span-3 text-center">{gap ? <span className="text-[11px] font-semibold text-slate-400 border border-slate-200 px-2 py-0.5 rounded">GAP</span> : <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">ACTIVE</span>}</div>
+                  <div className={`col-span-2 text-right ${gap?"text-slate-300":"text-slate-700"}`}>{raised?k(raised):"—"}</div>
+                  <div className={`col-span-2 text-right ${gap?"text-slate-300":"text-slate-500"}`}>{active||"—"}</div>
+                </div>
+              );
+            })}
+          </Card>
+        </div>
+      )}
+
+      {tab==="accounts" && (
+        c.children ? (
+          <Card className="overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+              <div className="text-sm font-semibold text-slate-700">Child accounts</div>
+              <div className="text-xs text-slate-400">{c.children.length} member schools · {fmt(childTotal)} total</div>
+            </div>
+            <div className="px-4 py-2 grid grid-cols-12 gap-2 text-xs font-semibold text-slate-400 border-b border-slate-100"><div className="col-span-5">Account</div><div className="col-span-2">State</div><div className="col-span-3 text-right">Revenue YTD</div><div className="col-span-2 text-right">Share</div></div>
+            {c.children.map(([nm,rev],i)=>{const share=Math.round(rev/childTotal*100);return(
+              <div key={i} className="px-4 py-2.5 grid grid-cols-12 gap-2 items-center border-b border-slate-50 text-sm">
+                <div className="col-span-5 flex items-center gap-2 text-slate-700"><Building2 size={14} className="text-slate-400"/>{nm}</div>
+                <div className="col-span-2 text-slate-500">{c.st}</div>
+                <div className="col-span-3 text-right text-slate-700">{fmt(rev)}</div>
+                <div className="col-span-2"><div className="flex items-center gap-2 justify-end"><div className="w-12 h-1.5 bg-slate-100 rounded-full"><div className="h-1.5 bg-blue-500 rounded-full" style={{width:`${share}%`}}/></div><span className="text-xs text-slate-500 w-8 text-right">{share}%</span></div></div>
+              </div>
+            );})}
+          </Card>
+        ) : (
+          <Card className="p-8 text-center">
+            <Building2 size={28} className="text-slate-300 mx-auto mb-2"/>
+            <div className="text-sm font-medium text-slate-600">Single account</div>
+            <div className="text-xs text-slate-400 mt-1 max-w-md mx-auto">No child schools roll up to this customer. Add one if {c.name} spans multiple schools or sites.</div>
+            <button className="mt-3 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg inline-flex items-center gap-1"><Plus size={13}/> Add child account</button>
+          </Card>
+        )
+      )}
+
+      {tab==="plays" && (
+        <div className="space-y-4">
+          <div>
+            <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Active</div>
+            <div className="space-y-2">
+              {[["Renewal Conversation","Step 1 of 4","blue"],["Pre-Season Readiness Audit","Step 3 of 5","emerald"]].map(([n,p,c2],i)=>(
+                <Card key={i} className="p-3.5 flex items-center gap-3"><div className={`h-8 w-8 rounded-lg bg-${c2}-100 text-${c2}-600 grid place-items-center`}><Zap size={15}/></div><div className="flex-1"><div className="text-sm font-medium text-slate-800">{n}</div><div className="text-xs text-slate-400">{p}</div></div><Pill tone={c2}>Active</Pill></Card>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Past</div>
+            <div className="space-y-2">
+              {[["Pre-Sale Email Sequence","Goal met — published all fall events"],["QBR","Completed"]].map(([n,p],i)=>(
+                <Card key={i} className="p-3.5 flex items-center gap-3 opacity-80"><div className="h-8 w-8 rounded-lg bg-slate-100 text-slate-400 grid place-items-center"><Zap size={15}/></div><div className="flex-1"><div className="text-sm font-medium text-slate-700">{n}</div><div className="text-xs text-slate-400">{p}</div></div><Pill tone="slate">Done</Pill></Card>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab==="journeys" && (
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-3"><div className="text-sm font-semibold text-slate-700">School Year Lifecycle — SY 2025–26</div><Pill tone="amber">In-Season · behind</Pill></div>
+          {[
+            ["Pre-Season", true, [["Kickoff call","done","task"],["Pricing & schedule set","done","achievement"],["Staff trained","done","task"],["Gates tested","done","achievement"]]],
+            ["In-Season", false, [["Mid-season revenue check","active","task"],["Cash adoption review","overdue","task"],["Concessions live","upcoming","achievement"]]],
+            ["Renewal", false, [["Renewal conversation","upcoming","task"],["Return confirmed","upcoming","achievement"],["Contract executed","upcoming","achievement"]]],
+          ].map(([phase,done,steps],pi)=>(
+            <div key={pi} className="mb-3">
+              <div className="flex items-center gap-2 mb-1.5"><div className={`h-5 w-5 rounded-full grid place-items-center text-white text-[10px] font-bold ${done?"bg-emerald-500":pi===1?"bg-amber-500":"bg-slate-300"}`}>{pi+1}</div><span className="text-sm font-semibold text-slate-700">{phase}</span></div>
+              <div className="pl-7 space-y-1">
+                {steps.map(([s,st,kind],i)=>(
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <div className={`h-4 w-4 rounded grid place-items-center ${st==="done"?"bg-emerald-500 text-white":st==="active"?"bg-amber-100 text-amber-600":st==="overdue"?"bg-red-100 text-red-600":"bg-slate-100 text-slate-300"}`}>{st==="done"?<CheckCircle2 size={11}/>:<Clock size={10}/>}</div>
+                    <span className={`flex-1 ${st==="overdue"?"text-red-700":"text-slate-700"}`}>{s}</span>
+                    {kind==="task"?<span className="text-xs text-blue-400 flex items-center gap-1"><ListChecks size={11}/>task</span>:<span className="text-xs text-violet-400 flex items-center gap-1"><Star size={11}/>achievement</span>}
+                    {st==="overdue" && <Pill tone="red">overdue</Pill>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {tab==="activity" && (
+        <Card className="overflow-hidden">
+          {[
+            [Mail,"Email sent — 'Renewal proposal for SY26'","Chris Smith · Manual","2h ago","blue"],
+            [Bot,"Play step — pre-season pricing email","Pre-Season Readiness · Play","1d ago","violet"],
+            [Phone,"Call logged — 18 min (positive)","Chris Smith · Manual","2d ago","emerald"],
+            [AlertTriangle,"Health alert — dropped to "+BANDS[bandOf(c.score)].label,"System · Automated","3d ago","amber"],
+            [StickyNote,"Note added — discussed fall schedule","Chris Smith · Manual","6d ago","slate"],
+          ].map(([Ic,t,who,time,tone],i)=>(
+            <div key={i} className="px-4 py-3 flex gap-3 border-b border-slate-50">
+              <div className={`h-8 w-8 rounded-full grid place-items-center bg-${tone}-100 text-${tone}-600 shrink-0`}><Ic size={15}/></div>
+              <div className="flex-1"><div className="text-sm text-slate-800">{t}</div><div className="text-xs text-slate-400">{who} · {time}</div></div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {tab==="contacts" && (
+        <div className="space-y-4">
+          <Card className="p-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Org mapping coverage</div>
+                <div className="text-lg font-semibold text-slate-900 mt-0.5">5 of 8 critical roles filled</div>
+                <div className="text-sm text-slate-500 mt-0.5">Missing: <span className="text-red-600 font-medium">Superintendent, CFO, IT Director</span> · Required for full account coverage</div>
+              </div>
+              <div className="text-right"><div className="text-3xl font-semibold text-orange-500">62%</div><div className="text-xs text-slate-400">role coverage</div></div>
+            </div>
+            <div className="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-orange-500 rounded-full" style={{width:"62%"}}/></div>
+          </Card>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {[["All · 8",true],["Decision Makers · 3",false],["Outage Contacts · 2",false],["Champions · 2",false],["Missing · 3",false]].map(([l,act],i)=>(
+              <button key={i} className={`text-xs font-medium px-3 py-1.5 rounded-full border ${act?"bg-blue-600 text-white border-blue-600":"bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>{l}</button>
+            ))}
+            <div className="ml-auto flex items-center gap-2">
+              <div className="relative"><Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"/><input placeholder="Search contacts…" className="bg-slate-100 rounded-lg pl-8 pr-3 py-1.5 text-xs w-44 focus:outline-none"/></div>
+              <button className="text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg flex items-center gap-1"><UserPlus size={13}/> Add contact</button>
+            </div>
+          </div>
+
+          <Card className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse min-w-[820px]">
+              <thead><tr className="bg-slate-900 text-slate-300 text-xs uppercase tracking-wide"><th className="text-left font-semibold py-2.5 px-4">Contact</th><th className="text-left font-semibold py-2.5 px-4">Role</th><th className="text-left font-semibold py-2.5 px-4">Tags</th><th className="text-left font-semibold py-2.5 px-4">Last touch</th><th className="text-left font-semibold py-2.5 px-4">SY 2026-27</th><th className="text-right font-semibold py-2.5 px-4">Actions</th></tr></thead>
+              <tbody>
+                {contacts.map(([nm,email,phone,role,tags,[ch,days,chTone],sy,syTone,act],i)=>(
+                  <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
+                    <td className="py-3 px-4"><div className="font-medium text-slate-800">{nm}</div><div className="text-xs text-slate-400">{email} · {phone}</div></td>
+                    <td className="px-4 font-medium text-slate-700">{role}</td>
+                    <td className="px-4"><div className="flex gap-1 flex-wrap">{tags.map(([t,tn],j)=><span key={j} className={`text-[10px] font-semibold px-1.5 py-0.5 rounded bg-${tn}-100 text-${tn}-700`}>{t}</span>)}</div></td>
+                    <td className={`px-4 font-medium text-${chTone}-600`}>{ch} · {days}</td>
+                    <td className="px-4"><span className={`text-[10px] font-semibold px-2 py-0.5 rounded bg-${syTone}-100 text-${syTone}-700`}>{sy}</span></td>
+                    <td className="px-4 text-right">{act==="View" ? <button className="text-xs font-medium text-slate-600 border border-slate-200 px-3 py-1 rounded-lg">View</button> : <button className="text-xs font-medium text-white bg-blue-600 px-3 py-1 rounded-lg">Confirm</button>}</td>
+                  </tr>
+                ))}
+                {missing.map(([role,desc],i)=>(
+                  <tr key={"m"+i} className="border-b border-red-100 bg-red-50/60">
+                    <td className="py-3 px-4"><div className="flex items-center gap-2 text-red-700 font-medium"><AlertTriangle size={14}/> Missing contact: {role}</div><div className="text-xs text-red-400 mt-0.5 pl-6">{desc}</div></td>
+                    <td className="px-4"></td>
+                    <td className="px-4"><span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-600 text-white">REQUIRED</span></td>
+                    <td className="px-4 text-slate-300">—</td>
+                    <td className="px-4 text-slate-300">—</td>
+                    <td className="px-4 text-right"><button className="text-xs font-medium text-white bg-red-600 hover:bg-red-700 px-3 py-1 rounded-lg">Find &amp; add</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ===================== ACTION TRACKER (unchanged) ===================== */
+function ActionTracker({ go }) {
+  const [f, setF] = useState("all");
+  const filters = [["all","All"],["manual","CSM"],["play","Play"],["system","System"]];
+  const actions = [
+    { ic:Mail, t:"Email sent — 'Renewal proposal for SY26'", client:12, src:"manual", who:"Chris Smith", time:"2h ago", tone:"blue" },
+    { ic:Bot, t:"Play step — pre-season pricing email", client:1, src:"play", who:"Pre-Season Readiness", time:"3h ago", tone:"violet" },
+    { ic:Phone, t:"Call logged — 18 min (positive sentiment)", client:5, src:"manual", who:"Chris Smith", time:"5h ago", tone:"emerald" },
+    { ic:ListChecks, t:"Task created — 'Confirm fall schedule'", client:6, src:"play", who:"Renewal Conversation", time:"Yesterday", tone:"violet" },
+    { ic:AlertTriangle, t:"Health alert — dropped to Critical", client:13, src:"system", who:"Homie", time:"Yesterday", tone:"amber" },
+    { ic:StickyNote, t:"Note added — 'New AD transition'", client:11, src:"manual", who:"Chris Smith", time:"2d ago", tone:"slate" },
+    { ic:Mail, t:"Play step — Engage mobile app announcement", client:7, src:"play", who:"Engage Activation", time:"2d ago", tone:"violet" },
+    { ic:AlertTriangle, t:"Signal — silent churn risk flagged", client:14, src:"system", who:"Homie", time:"3d ago", tone:"amber" },
+  ];
+  const shown = actions.filter(a=>f==="all"||a.src===f);
+  const srcPill = { manual:["CSM","blue"], play:["Play","violet"], system:["System","amber"] };
+  return (
+    <div>
+      <PageHeader id="actions" />
+      <div className="flex gap-2 mb-4">
+        {filters.map(([id,l])=><button key={id} onClick={()=>setF(id)} className={`text-xs font-medium px-3 py-1.5 rounded-lg border ${f===id?"bg-blue-600 text-white border-blue-600":"bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>{l}</button>)}
+      </div>
+      <Card className="overflow-hidden">
+        {shown.map((a,i)=>{const Ic=a.ic; const cl=CLIENTS.find(x=>x.id===a.client); const [pl,tn]=srcPill[a.src];return(
+          <div key={i} className="px-4 py-3 flex items-center gap-3 border-b border-slate-50 hover:bg-slate-50">
+            <div className={`h-8 w-8 rounded-full grid place-items-center bg-${a.tone}-100 text-${a.tone}-600 shrink-0`}><Ic size={15}/></div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm text-slate-800">{a.t}</div>
+              <button onClick={()=>go("clients",cl.id)} className="text-xs text-blue-600 hover:underline">{cl.name}</button>
+              <span className="text-xs text-slate-400"> · {a.who} · {a.time}</span>
+            </div>
+            <Pill tone={tn}>{pl}</Pill>
+          </div>
+        );})}
+      </Card>
+    </div>
+  );
+}
+
+/* ===================== HEALTHSCORES (2 tabs) ===================== */
+function Healthscores() {
+  const [tab, setTab] = useState("build");
+  const factors = [
+    ["Goal pace (vs. season goal)",25,"emerald"],
+    ["Year-over-year revenue",20,"blue"],
+    ["Pipeline coverage",15,"violet"],
+    ["Fall events published",15,"sky"],
+    ["Renewal proximity",15,"rose"],
+    ["Cash adoption %",10,"amber"],
+  ];
+  const grid = [["≥ +10%","100%"],["0% to +10%","70%"],["−10% to 0%","40%"],["< −10%","0%"]];
+  const sample = [...CLIENTS].sort((a,b)=>b.score-a.score);
+  const calib = sample.filter((_,i)=>[0,2,5,8,11,13].includes(i));
+  return (
+    <div>
+      <PageHeader id="healthscores" />
+      <div className="flex gap-1 border-b border-slate-200 mb-4">
+        {[["build","Build & manage"],["clients","Client scores"]].map(([id,l])=><button key={id} onClick={()=>setTab(id)} className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab===id?"border-blue-600 text-blue-700":"border-transparent text-slate-500 hover:text-slate-800"}`}>{l}</button>)}
+      </div>
+
+      {tab==="build" && (
+        <div className="grid lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 space-y-4">
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-1"><div className="text-sm font-semibold text-slate-700">Hometown Health Score</div><Pill tone="blue">6 factors · weights = 100</Pill></div>
+              <div className="text-xs text-slate-400 mb-3">Weighted factors, scored 0–100, surfaced in 4 bands. Risk flags (silent churn, signed-not-launched…) can override the band.</div>
+              {factors.map(([f,p,c])=>(
+                <div key={f} className="flex items-center gap-3 py-2 border-b border-slate-50">
+                  <div className={`h-7 w-7 rounded-md bg-${c}-100 text-${c}-700 grid place-items-center text-xs font-bold`}>{p}</div>
+                  <div className="flex-1 text-sm text-slate-700">{f}</div>
+                  <div className="w-28 h-1.5 bg-slate-100 rounded-full"><div className={`h-1.5 bg-${c}-500 rounded-full`} style={{width:`${p*4}%`}}/></div>
+                </div>
+              ))}
+              <div className="flex justify-between pt-2 text-sm font-semibold text-slate-700"><span>Total</span><span>100 / 100</span></div>
+            </Card>
+            <Card className="p-4">
+              <div className="text-sm font-semibold text-slate-700 mb-1">Point allocation · "Year-over-year revenue"</div>
+              <div className="text-xs text-slate-400 mb-3">Reward positive movement. Top range inclusive, bottom range not.</div>
+              <div className="grid grid-cols-2 gap-px bg-slate-200 rounded-lg overflow-hidden border border-slate-200">
+                <div className="bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">Range (YoY %)</div>
+                <div className="bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">% of points</div>
+                {grid.map(([r,p],i)=>(<Fragment key={i}><div className="bg-white px-3 py-2 text-sm text-slate-700">{r}</div><div className="bg-white px-3 py-2 text-sm font-medium text-slate-800">{p}</div></Fragment>))}
+              </div>
+            </Card>
+          </div>
+          <Card className="p-4 h-fit">
+            <div className="text-sm font-semibold text-slate-700 mb-1">Calibrate</div>
+            <div className="text-xs text-slate-400 mb-3">Preview real clients across bands before publishing.</div>
+            {calib.map(c=>(
+              <div key={c.id} className="flex items-center gap-2 py-1.5 text-sm"><Dot score={c.score}/><span className="flex-1 text-slate-700 truncate">{c.name}</span><span className="font-semibold text-slate-800">{c.score}</span></div>
+            ))}
+            <button className="mt-3 w-full text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 py-1.5 rounded-md">Recalculate</button>
+          </Card>
+        </div>
+      )}
+
+      {tab==="clients" && (
+        <Card className="overflow-hidden">
+          <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 grid grid-cols-12 gap-2 text-xs font-semibold text-slate-500 uppercase"><div className="col-span-4">Client</div><div className="col-span-2">Health</div><div className="col-span-2 text-right">Goal score</div><div className="col-span-2 text-right">YoY score</div><div className="col-span-2 text-right">Pipeline</div></div>
+          {sample.map(c=>(
+            <div key={c.id} className="px-4 py-2.5 grid grid-cols-12 gap-2 items-center border-b border-slate-50 text-sm">
+              <div className="col-span-4 font-medium text-slate-800 truncate">{c.name}</div>
+              <div className="col-span-2 flex items-center gap-2"><HealthBadge score={c.score} size="sm"/><span className="text-xs text-slate-400">{BANDS[bandOf(c.score)].label}</span></div>
+              <div className="col-span-2 text-right text-slate-600">{c.gs}</div>
+              <div className="col-span-2 text-right text-slate-600">{c.ys}</div>
+              <div className="col-span-2 text-right text-slate-600">{c.ps}</div>
+            </div>
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* ===================== PLAYS (2 tabs) ===================== */
+function Plays() {
+  const [tab, setTab] = useState("build");
+  const steps = [
+    { ic:Mail, t:"Email — 'Let's prep for fall: pricing & schedule'", meta:"Day 0 · review required", tone:"blue" },
+    { ic:Clock, t:"Wait 3 days", meta:"Delay", tone:"slate" },
+    { ic:ListChecks, t:"Task — 'Confirm sport schedule & ticket pricing'", meta:"Day 3 · assign to owner", tone:"amber" },
+    { ic:ChevronRight, t:"Branch — schedule confirmed?", meta:"Yes → publish nudge · No → CSM task", tone:"violet" },
+    { ic:CheckCircle2, t:"Goal — all fall events published", meta:"Exit criteria · auto-removes client", tone:"emerald" },
+  ];
+  const enroll = [
+    [CLIENTS[0],"Pre-Season Readiness Audit","past: Pre-Sale Sequence"],
+    [CLIENTS[4],"Renewal Conversation","past: QBR"],
+    [CLIENTS[10],"Exec Sponsor Intro","—"],
+    [CLIENTS[8],"Save Play","past: Win-Back"],
+    [CLIENTS[1],"—","past: Football Flash Sale"],
+  ];
+  return (
+    <div>
+      <PageHeader id="plays" />
+      <div className="flex gap-1 border-b border-slate-200 mb-4">
+        {[["build","Build & manage"],["clients","Client plays"]].map(([id,l])=><button key={id} onClick={()=>setTab(id)} className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab===id?"border-blue-600 text-blue-700":"border-transparent text-slate-500 hover:text-slate-800"}`}>{l}</button>)}
+      </div>
+
+      {tab==="build" && (
+        <div className="grid lg:grid-cols-3 gap-4">
+          <Card className="overflow-hidden h-fit">
+            <div className="px-3 py-2.5 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase">Play library</div>
+            {[["Pre-Season Readiness Audit","Active","emerald"],["Football Flash Sale","Active","emerald"],["Pre-Sale Email Sequence","Active","emerald"],["Renewal Conversation","Active","emerald"],["Quarterly Business Review","Active","emerald"],["Save Play","Draft","slate"],["Win-Back","Paused","amber"],["Exec Sponsor Intro","Draft","slate"]].map(([n,s,c],i)=>(
+              <div key={n} className={`px-3 py-2.5 flex items-center gap-2 cursor-pointer ${i===0?"bg-blue-50":"hover:bg-slate-50"}`}><span className={`h-2 w-2 rounded-full bg-${c}-500`}/><span className="flex-1 text-sm text-slate-700">{n}</span><span className="text-xs text-slate-400">{s}</span></div>
+            ))}
+          </Card>
+          <div className="lg:col-span-2 space-y-4">
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-1"><div className="text-sm font-semibold text-slate-700">Pre-Season Readiness Audit — sequence</div><div className="flex gap-2"><button className="text-xs font-medium text-slate-600 border border-slate-200 px-2.5 py-1 rounded-md flex items-center gap-1"><Eye size={12}/> Audience: 22</button><button className="text-xs font-medium text-white bg-emerald-600 px-2.5 py-1 rounded-md flex items-center gap-1"><Play size={12}/> Active</button></div></div>
+              <div className="text-xs text-slate-400 mb-4">Enrolls clients in segment "Fall sports · pre-season"</div>
+              <div className="relative pl-4">
+                <div className="absolute left-[27px] top-2 bottom-2 w-px bg-slate-200"/>
+                {steps.map((s,i)=>{const Ic=s.ic;return(
+                  <div key={i} className="flex items-center gap-3 mb-3 relative"><GripVertical size={14} className="text-slate-300"/><div className={`h-9 w-9 rounded-lg bg-${s.tone}-100 text-${s.tone}-600 grid place-items-center z-10`}><Ic size={16}/></div><div className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2"><div className="text-sm font-medium text-slate-800">{s.t}</div><div className="text-xs text-slate-400">{s.meta}</div></div></div>
+                );})}
+                <button className="ml-12 text-xs font-medium text-blue-600 flex items-center gap-1"><Plus size={13}/> Add step</button>
+              </div>
+            </Card>
+            <div className="flex gap-3"><Tile label="In progress" value="22"/><Tile label="Completed" value="48"/><Tile label="Goal met" value="31" delta={4}/></div>
+          </div>
+        </div>
+      )}
+
+      {tab==="clients" && (
+        <Card className="overflow-hidden">
+          <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 grid grid-cols-12 gap-2 text-xs font-semibold text-slate-500 uppercase"><div className="col-span-4">Client</div><div className="col-span-2">Health</div><div className="col-span-3">Active play</div><div className="col-span-3">Recent</div></div>
+          {enroll.map(([c,active,past],i)=>(
+            <div key={i} className="px-4 py-3 grid grid-cols-12 gap-2 items-center border-b border-slate-50 text-sm">
+              <div className="col-span-4 font-medium text-slate-800 truncate">{c.name}</div>
+              <div className="col-span-2"><HealthBadge score={c.score} size="sm"/></div>
+              <div className="col-span-3">{active==="—"?<span className="text-slate-400 text-xs">none</span>:<span className="flex items-center gap-1.5 text-slate-700"><Zap size={13} className="text-emerald-500"/>{active}</span>}</div>
+              <div className="col-span-3 text-xs text-slate-400">{past}</div>
+            </div>
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* ===================== JOURNEYS (2 tabs) ===================== */
+function Journeys() {
+  const [tab, setTab] = useState("build");
+  const milestones = ["Kickoff call","Pricing set","Schedule loaded","Staff trained","Gates tested","Go-live"];
+  const statusFor = (c, mi) => {
+    const prog = c.score>=80 ? 6 : c.score>=60 ? 4 : c.score>=40 ? 3 : 2;
+    if (mi < prog-1) return "done";
+    if (mi === prog-1) return c.score<40 ? "overdue" : "active";
+    return "upcoming";
+  };
+  const cell = { done:"bg-emerald-500", active:"bg-amber-400", overdue:"bg-red-500", upcoming:"bg-slate-200" };
+  return (
+    <div>
+      <PageHeader id="journeys" />
+      <div className="flex gap-1 border-b border-slate-200 mb-4">
+        {[["build","Build & manage"],["clients","Client journeys"]].map(([id,l])=><button key={id} onClick={()=>setTab(id)} className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab===id?"border-blue-600 text-blue-700":"border-transparent text-slate-500 hover:text-slate-800"}`}>{l}</button>)}
+      </div>
+
+      {tab==="build" && (
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-3"><div className="text-sm font-semibold text-slate-700">School Year Lifecycle</div><Pill tone="emerald">Active · 3 phases</Pill></div>
+          {[
+            ["Pre-Season","Days 0–30",[["Kickoff call","task"],["Pricing & schedule set","achievement"],["Staff trained","task"],["Gates tested","achievement"]]],
+            ["In-Season","ongoing",[["Mid-season revenue check","task"],["Cash adoption review","task"],["Concessions live","achievement"]]],
+            ["Renewal","60d before end",[["Renewal conversation","task"],["Return confirmed","achievement"],["Contract executed","achievement"]]],
+          ].map(([phase,when,steps],pi)=>(
+            <div key={pi} className="mb-3 border-b border-slate-50 pb-3 last:border-0">
+              <div className="flex items-center gap-2 mb-1.5"><div className="h-6 w-6 rounded-full grid place-items-center text-white text-xs font-bold bg-slate-700">{pi+1}</div><span className="text-sm font-semibold text-slate-700">{phase}</span><span className="text-xs text-slate-400">{when}</span></div>
+              <div className="pl-8 space-y-1">
+                {steps.map(([s,kind],i)=>(
+                  <div key={i} className="flex items-center gap-2 text-sm text-slate-600">{kind==="task"?<ListChecks size={13} className="text-blue-400"/>:<Star size={13} className="text-violet-400"/>}{s}<span className="text-xs text-slate-300">· {kind}</span></div>
+                ))}
+                <button className="text-xs font-medium text-blue-600 flex items-center gap-1 mt-1"><Plus size={12}/> Add step</button>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {tab==="clients" && (
+        <Card className="p-4 overflow-x-auto">
+          <div className="flex items-center justify-between mb-3"><div className="text-sm font-semibold text-slate-700">Lifecycle grid · Pre-Season</div><div className="flex gap-2 text-xs"><span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500"/>done</span><span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-amber-400"/>active</span><span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-red-500"/>overdue</span><span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-slate-200"/>upcoming</span></div></div>
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="text-xs text-slate-400">
+                <th className="text-left font-semibold py-2 pr-3 sticky left-0 bg-white">Client</th>
+                {milestones.map(m=><th key={m} className="font-medium px-2 py-2 text-center whitespace-nowrap">{m}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {[...CLIENTS].sort((a,b)=>a.score-b.score).map(c=>(
+                <tr key={c.id} className="border-t border-slate-50">
+                  <td className="py-2 pr-3 sticky left-0 bg-white"><div className="flex items-center gap-2"><Dot score={c.score}/><span className="text-slate-700 truncate max-w-[180px]">{c.name}</span></div></td>
+                  {milestones.map((m,mi)=>{const st=statusFor(c,mi);return <td key={mi} className="px-2 py-2 text-center"><div className={`h-5 w-5 rounded mx-auto ${cell[st]} grid place-items-center`}>{st==="done"&&<CheckCircle2 size={12} className="text-white"/>}{st==="overdue"&&<AlertTriangle size={11} className="text-white"/>}</div></td>;})}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* ===================== INFOBOOK ===================== */
+function Infobook() {
+  const rev = [{m:"Jan",r:142},{m:"Feb",r:118},{m:"Mar",r:196},{m:"Apr",r:204},{m:"May",r:171},{m:"Jun",r:88}];
+  const sport = [{s:"Football",r:312},{s:"Basketball",r:198},{s:"Soccer",r:121},{s:"Baseball",r:64},{s:"Volleyball",r:47}];
+  return (
+    <div>
+      <PageHeader id="infobook" />
+      <Card className="overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <div className="flex items-center gap-2"><BarChart3 size={16} className="text-slate-500"/><div><div className="text-sm font-semibold text-slate-700">CS Infobook SY26 — Looker Dashboard</div><div className="text-xs text-slate-400">Live in production · refreshes hourly</div></div></div>
+          <button className="text-xs font-medium text-blue-700 bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1"><ExternalLink size={12}/> Open in Looker</button>
+        </div>
+        <div className="p-4 grid md:grid-cols-2 gap-4">
+          <div><div className="text-sm font-semibold text-slate-700 mb-2">Book revenue by month ($k)</div>
+            <ResponsiveContainer width="100%" height={200}><AreaChart data={rev}><defs><linearGradient id="iv" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2563eb" stopOpacity={0.3}/><stop offset="100%" stopColor="#2563eb" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/><XAxis dataKey="m" tick={{fontSize:11}} stroke="#94a3b8"/><YAxis tick={{fontSize:11}} stroke="#94a3b8"/><Tooltip/><Area type="monotone" dataKey="r" stroke="#2563eb" strokeWidth={2} fill="url(#iv)"/></AreaChart></ResponsiveContainer>
+          </div>
+          <div><div className="text-sm font-semibold text-slate-700 mb-2">Revenue by sport ($k)</div>
+            <ResponsiveContainer width="100%" height={200}><BarChart data={sport}><CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/><XAxis dataKey="s" tick={{fontSize:10}} stroke="#94a3b8"/><YAxis tick={{fontSize:11}} stroke="#94a3b8"/><Tooltip/><Bar dataKey="r" fill="#2563eb" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer>
+          </div>
+        </div>
+        <div className="px-4 pb-4 text-xs text-slate-400">Embedded Looker Studio dashboard — the same numbers the rest of the business sees. (Representative panels shown here.)</div>
+      </Card>
+    </div>
+  );
+}
+
+/* ===================== ADMIN ===================== */
+function Admin() {
+  const integrations = [
+    ["Google", "Gmail & Calendar", "Connected", "emerald", Mail],
+    ["Slack", "Alerts & Homie lookups", "Connect", "slate", Slack],
+    ["Salesforce", "System of record + write-back", "Connected", "emerald", Plug],
+    ["Snowflake", "Revenue, health & usage", "Connected", "emerald", Plug],
+  ];
+  const sections = [
+    { ic:KeyRound, title:"Application & API Keys", scope:"Admin only", desc:"Keys for ingest, the Salesforce write-back, and integrations", items:["Production App Key","Salesforce (write-back)","Snowflake (read)"] },
+    { ic:Users, title:"Users & Roles", scope:"Admin & CS Leadership", desc:"Manage seats, roles and SSO", items:["CSM","CS Leadership","Admin","Google SSO ✓"] },
+    { ic:Bot, title:"Homie", scope:"Admin only", desc:"Configure the Homie assistant — health engine, alerts, and in-chat lookups", items:["Health scoring job","Slack alerts","Account lookups"] },
+  ];
+  return (
+    <div>
+      <PageHeader id="admin" />
+      <Card className="p-4 mb-4">
+        <div className="flex items-center gap-2 mb-1"><Plug size={15} className="text-slate-500"/><div className="text-sm font-semibold text-slate-700">Integrations</div></div>
+        <div className="text-xs text-slate-400 mb-3">Connect your Google and Slack accounts so email, calendar and alerts work. (Available to everyone.)</div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {integrations.map(([n,d,status,tone,Ic])=>(
+            <div key={n} className="flex items-center gap-3 border border-slate-200 rounded-lg p-3">
+              <div className="h-9 w-9 rounded-lg bg-slate-100 text-slate-600 grid place-items-center"><Ic size={16}/></div>
+              <div className="flex-1"><div className="text-sm font-medium text-slate-800">{n}</div><div className="text-xs text-slate-400">{d}</div></div>
+              {status==="Connected"
+                ? <span className="flex items-center gap-1 text-xs font-medium text-emerald-600"><CheckCircle2 size={14}/> Connected</span>
+                : <button className="text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg">Connect</button>}
+            </div>
+          ))}
+        </div>
+      </Card>
+      <div className="grid md:grid-cols-3 gap-4">
+        {sections.map(s=>{const Ic=s.ic;return(
+          <Card key={s.title} className="p-4">
+            <div className="flex items-center gap-2.5 mb-1"><div className="h-8 w-8 rounded-lg bg-slate-100 text-slate-600 grid place-items-center"><Ic size={15}/></div><div className="text-sm font-semibold text-slate-800">{s.title}</div></div>
+            <div className="mb-2"><Pill tone={s.scope.includes("Leadership")?"violet":"slate"}>{s.scope}</Pill></div>
+            <div className="text-xs text-slate-400 mb-3">{s.desc}</div>
+            <div className="flex flex-wrap gap-1.5">{s.items.map(it=><span key={it} className="px-2 py-1 rounded-md bg-slate-50 border border-slate-100 text-xs text-slate-600">{it}</span>)}</div>
+          </Card>
+        );})}
+      </div>
+    </div>
+  );
+}
+
+/* ===================== ROADMAP / SCOPE ===================== */
+const SCOPE = [
+  ["Command Center (daily home)","V1",["Steve","ChurnZero"],"Daily landing: goal progress, product adoption, to-dos and meetings."],
+  ["Book Goal Progress","V1",["Steve"],"Book-wide revenue vs. season goal, with over/under-goal counts."],
+  ["Product Adoption","V1",["Steve"],"Adoption of Fundraising, SchoolFundr+ and Engage across the book."],
+  ["Clients / Book of Business","V1",["Steve","ChurnZero"],"Sortable book table with expandable per-account detail."],
+  ["Client 360","V1",["Steve","ChurnZero"],"Full account page: health, revenue, plays, lifecycle, contacts."],
+  ["Sport Coverage","V1",["Steve"],"Per-sport revenue this year vs. last, with gap flags."],
+  ["Fundraising Coverage","V1",["Steve"],"Which fundraising campaign types are active vs. a gap."],
+  ["Action Tracker (manual + automated)","V1",["Steve"],"Feed of every action taken — by a CSM or a Play."],
+  ["Touchpoints","V1",["Steve"],"Log calls, meetings and notes against an account in one feed."],
+  ["Salesforce write-back — daily","V1",["Steve"],"Push touchpoints and tasks back to Salesforce on a daily batch sync."],
+  ["Healthscores (Homie engine)","V1",["Steve","ChurnZero"],"Consume Homie's weekly 0–100 scores and sub-scores."],
+  ["Tiers & health bands","V1",["Steve","ChurnZero"],"Revenue-based client tiers (T1–T3) and Healthy / Watch / At-risk / Critical bands — not action segments."],
+  ["Org-mapping coverage (contacts)","V1",["Steve"],"Track key roles per account and flag missing decision-makers."],
+  ["Plays — sequence builder + goal/exit","V1",["Steve","ChurnZero"],"Build a step sequence with a goal that auto-exits the account."],
+  ["Draft-then-confirm (review gate)","V1",["Steve","ChurnZero"],"Plays draft the action; a human reviews before anything sends."],
+  ["Journeys — milestones, tasks/achievements","V1",["Steve","ChurnZero"],"Lifecycle templates with milestones, tasks and achievements."],
+  ["Lifecycle grid (clients × milestones)","V1",["Steve"],"Whole-book grid of milestone status per account."],
+  ["Infobook (Looker embed)","V1",["Steve"],"Existing Looker dashboard embedded for book analytics."],
+  ["Homie assistant + Slack alerts","V1",["Steve","ChurnZero"],"Homie answers account lookups and pushes alerts into Slack."],
+  ["Integrations (Google, Slack, SF, Snowflake)","V1",["Steve","ChurnZero"],"Connectors for email/calendar, chat, CRM and the warehouse."],
+  ["Auth — Google SSO + RBAC","V1",["Steve"],"Google sign-in with role-based access (CSM / leadership / admin)."],
+  ["CSM health override (reason / expiry / audit)","Future",["Steve"],"Let a CSM override a score with a reason and auto-expiry."],
+  ["Salesforce write-back — instant","Future",["Steve"],"Real-time write-back the moment an action is logged, not on a daily batch."],
+  ["Admin-configured healthscores","Future",["ChurnZero"],"Admins build the score themselves — weighted factors and point bands, like ChurnZero."],
+  ["Automated actions (autonomous play execution)","Future",["Steve","ChurnZero"],"Plays fire steps automatically with no human confirm gate."],
+  ["Flexible segment builder","Future",["ChurnZero"],"Define dynamic segments from any data point."],
+  ["Native reporting & dashboards","Future",["ChurnZero"],"Build custom in-app dashboards beyond the Looker embed."],
+  ["Renewal & Forecast Hub ($, GRR/NRR)","Future",["ChurnZero"],"Dollar-denominated renewal forecast with GRR / NRR."],
+  ["Success Plans","Future",["ChurnZero"],"Shared, goal-tracking plans co-owned with the customer."],
+  ["Surveys (NPS / CSAT / CES)","Future",["ChurnZero"],"Send surveys and feed responses into the health score."],
+  ["AI Hub / agents / Snapshot AI","Future",["ChurnZero"],"AI account summaries and assistive agents."],
+  ["Command palette (⌘K)","Future",["ChurnZero"],"Keyboard-first jump-to navigation and quick actions."],
+  ["News & Signals feed","Future",["Steve"],"Surface AD changes, news and external signals per account."],
+  ["Weather Watch","Future",["Steve"],"Flag weather that may affect upcoming ticketed events."],
+  ["Suggested plays w/ confidence","Future",["Steve"],"Rule-based play recommendations with a confidence score."],
+  ["Action card mechanics (snooze / undo / dismiss)","Future",["Steve"],"Snooze, undo and dismiss controls on action cards."],
+  ["Stripe discount as a play action","Future",["Steve"],"Apply a Stripe discount automatically when a play runs."],
+  ["Custom fields / custom objects admin","Future",["ChurnZero"],"Admin-define custom fields and objects without code."],
+];
+const verTone = { "V1":"emerald", "Future":"amber", "Not planned":"slate" };
+const srcTone = { "ChurnZero":"blue", "Steve":"violet" };
+
+function Scope() {
+  const [f, setF] = useState("all");
+  const [src, setSrc] = useState("all");
+  const filters = [["all","All"],["V1","V1"],["Future","Future"]];
+  const sources = [["all","All"],["ChurnZero","ChurnZero"],["Steve","Steve"]];
+  const rows = SCOPE.filter(r=>(f==="all"||r[1]===f) && (src==="all"||r[2].includes(src)));
+  const counts = { V1:SCOPE.filter(r=>r[1]==="V1").length, Future:SCOPE.filter(r=>r[1]==="Future").length };
+  return (
+    <div>
+      <PageHeader id="scope" />
+      <div className="flex flex-wrap gap-3 mb-4">
+        <Tile label="In V1" value={counts.V1} />
+        <Tile label="Future versions" value={counts.Future} />
+      </div>
+      <div className="space-y-2 mb-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium text-slate-400 w-14 shrink-0">Version</span>
+          {filters.map(([id,l])=><button key={id} onClick={()=>setF(id)} className={`text-xs font-medium px-3 py-1.5 rounded-lg border ${f===id?"bg-blue-600 text-white border-blue-600":"bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>{l}</button>)}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium text-slate-400 w-14 shrink-0">Source</span>
+          {sources.map(([id,l])=><button key={id} onClick={()=>setSrc(id)} className={`text-xs font-medium px-3 py-1.5 rounded-lg border ${src===id?"bg-blue-600 text-white border-blue-600":"bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>{l}</button>)}
+        </div>
+      </div>
+      <Card className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse min-w-[560px]">
+          <thead><tr className="bg-slate-50 text-xs text-slate-500 uppercase border-b border-slate-200"><th className="text-left font-semibold py-2.5 px-4">Capability</th><th className="text-left font-semibold py-2.5 px-4 w-32">Version</th><th className="text-left font-semibold py-2.5 px-4 w-36">Source</th></tr></thead>
+          <tbody>
+            {rows.map(([cap,ver,source,desc],i)=>(
+              <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
+                <td className="py-2.5 px-4"><div className="text-slate-800 font-medium">{cap}</div><div className="text-xs text-slate-400 mt-0.5">{desc}</div></td>
+                <td className="px-4 align-top py-2.5"><Pill tone={verTone[ver]}>{ver}</Pill></td>
+                <td className="px-4 align-top py-2.5"><div className="flex gap-1 flex-wrap">{source.map(s=><Pill key={s} tone={srcTone[s]}>{s}</Pill>)}</div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+      <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400">
+        <span className="flex items-center gap-1.5"><Pill tone="blue">ChurnZero</Pill> from the ChurnZero teardown</span>
+        <span className="flex items-center gap-1.5"><Pill tone="violet">Steve</Pill> from Steve's mockup</span>
+        <span>Items shared by both show both tags — filtering by either includes them.</span>
+      </div>
+    </div>
+  );
+}
+
+/* ===================== SHELL ===================== */
+export default function App() {
+  const [page, setPage] = useState("command");
+  const [clientId, setClientId] = useState(5);
+  const [inProfile, setInProfile] = useState(false);
+  const client = CLIENTS.find(c=>c.id===clientId) || CLIENTS[0];
+
+  const navTo = (p, id) => {
+    if (p==="clients" && id!=null) { setInProfile(true); setClientId(id); }
+    else if (p==="clients") { setInProfile(false); }
+    setPage(p); window.scrollTo(0,0);
+  };
+
+  const render = () => {
+    switch (page) {
+      case "command": return <CommandCenter go={navTo}/>;
+      case "clients": return inProfile ? <ClientProfile c={client} go={(p,id)=>{ if(p==="clients"&&id==null){setInProfile(false);} else navTo(p,id);} }/> : <ClientsList go={navTo}/>;
+      case "actions": return <ActionTracker go={navTo}/>;
+      case "healthscores": return <Healthscores/>;
+      case "plays": return <Plays/>;
+      case "journeys": return <Journeys/>;
+      case "infobook": return <Infobook/>;
+      case "admin": return <Admin/>;
+      case "scope": return <Scope/>;
+      default: return null;
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-slate-100 text-slate-900 overflow-hidden" style={{fontFamily:'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif'}}>
+      <aside className="w-56 bg-slate-900 flex flex-col shrink-0">
+        <div className="px-4 h-14 flex items-center gap-2 border-b border-slate-800">
+          <div className="h-7 w-7 rounded-md bg-blue-500 grid place-items-center text-white"><HeartPulse size={16}/></div>
+          <span className="text-white font-semibold tracking-tight">CS Workspace</span>
+          <span className="ml-auto text-[10px] text-slate-500 uppercase">demo</span>
+        </div>
+        <nav className="flex-1 py-2 overflow-y-auto">
+          {NAV.map(n=>{const Icon=n.icon; const active=page===n.id; return(
+            <button key={n.id} onClick={()=>navTo(n.id)} className={`w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors ${active?"bg-slate-800 text-white border-l-2 border-blue-500":"text-slate-400 hover:text-white hover:bg-slate-800/50 border-l-2 border-transparent"}`}><Icon size={17}/> {n.label}</button>
+          );})}
+        </nav>
+        <div className="p-3 border-t border-slate-800 flex items-center gap-2">
+          <div className="h-8 w-8 rounded-full bg-blue-600 grid place-items-center text-white text-xs font-bold">CS</div>
+          <div className="text-xs"><div className="text-slate-200 font-medium">Chris Smith</div><div className="text-slate-500">CSM</div></div>
+        </div>
+      </aside>
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-14 bg-white border-b border-slate-200 flex items-center px-5 gap-4 shrink-0">
+          <div className="relative flex-1 max-w-md">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+            <input placeholder="Search clients, schools, plays…" className="w-full bg-slate-100 rounded-lg pl-9 pr-3 py-1.5 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-200"/>
+          </div>
+          <button className="text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5"><Plus size={15}/> Create</button>
+          <button className="relative text-slate-500 hover:text-slate-800"><Bell size={19}/><span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-red-500 rounded-full"/></button>
+        </header>
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-6xl mx-auto">{render()}</div>
+          <div className="max-w-6xl mx-auto mt-8 text-center text-xs text-slate-400">Interactive prototype · client names, revenue and health scores are real (Snowflake, Chris Smith's book). Plays, journeys, contacts, fundraising and activity are illustrative.</div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+
+createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
